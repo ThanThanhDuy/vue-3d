@@ -1,162 +1,94 @@
-<script setup lang="js">
-import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import axios from "axios"
-import {ref} from "vue"
-import * as THREE from 'three';
-
-const data = ref()
-let controls;
-// get data form server
-const get_data= async()=>{
-  const width = window.innerWidth, height = window.innerHeight;
-
-  var initialZoom = 100;
-  const camera = new THREE.OrthographicCamera(
-          window.innerWidth / -initialZoom,
-          window.innerWidth / initialZoom,
-          window.innerHeight / initialZoom,
-          window.innerHeight / -initialZoom,
-          1,
-          1000
-        );
- camera.position.z = 0.1;
-// const camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 0.1, 1000 );
-
+<script setup lang="ts">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { onMounted, ref } from "vue";
+import axios from "axios";
+const data = ref<any>({});
+onMounted(async () => {
+  // Tạo scene, camera, và renderer
   const scene = new THREE.Scene();
-
- // do - xanh la cay - vang - ti1m - xanh dam - trang -
-  const colors = ['#ff0000','#00ff00','#ffc815','#433e90','#0f8880','#eeeeee','#556f55',]
-  const mesh = []
-  let res = await axios.get("http://192.168.1.57:8767/analysis/data?id=6dc7533b-90eb-458a-81a5-ce329b40bb1c");
-  data.value = res.data.data
-  var gridHelper = new THREE.GridHelper(10, 10); // Parameters: size, divisions
-   scene.add(gridHelper);
-
-    for (let index = 0; index < data.value.faces.length; index++) {
-
-      const e = data.value.faces[index];
-      const geometry = new THREE.BufferGeometry();
-      const positions = new Float32Array(e.vertex);
-      const normals = new Float32Array(e.normal);
-      const indices = new Uint16Array(e.triangle);
-
-      geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-      geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-      geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-
-      // let  p = index>(colors.length-1)? Math.floor(Math.random() * 8):index
-      //  p= index ==0 || index ==7 ?0:2;
-      var material = new THREE.MeshBasicMaterial({ color: colors[index] });
-
-  // const geometry = new THREE.BoxGeometry( 0.2, 0.2, 0.2 );
-  // const material = new THREE.MeshNormalMaterial();
-
-      mesh[index] = new THREE.Mesh( geometry, material )
-      scene.add( mesh[index] );
-    }
-
-    // for (let index = 0; index < data.value.holes.length; index++) {
-
-    //   const e = data.value.holes[index].children;
-
-    //   for (let j = 0; j < e.length; j++) {
-    //     const el = e[j];
-    //     console.log(el)
-    //     const geometry = new THREE.BufferGeometry();
-    //     const positions = new Float32Array(el.vertex);
-    //     const normals = new Float32Array(el.normal);
-    //     const indices = new Uint16Array(el.triangle);
-
-    //   geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    //   geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
-    //   geometry.setIndex(new THREE.BufferAttribute(indices, 1));
-
-    //   let material = new THREE.MeshBasicMaterial({ color: colors[0] });
-
-    //   let meshs = new THREE.Mesh( geometry, material )
-    //   scene.add( meshs );
-    //   }
-
-
-    // }
-
-
-  function animation( time ) {
-
-    for ( let j = 0 ;j<mesh.length;j++){
-        mesh[j].position.x = -2
-      //mesh[j].rotation.x = time / 7000;
-      //mesh[j].rotation.y = time / 7000;
-    }
-
-    renderer.render( scene, camera );
+  scene.background = new THREE.Color(0xffffff);
+  const camera = new THREE.PerspectiveCamera(
+    75,
+    window.innerWidth / window.innerHeight,
+    0.1,
+    1000
+  );
+  const renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+  let res = await axios.get(
+    "http://192.168.1.57:8767/analysis/data?id=b6ed3d7a-5e0f-41d2-99e8-51728ad55966"
+  );
+  data.value = res.data.data;
+  let listMesh: any = [];
+  for (let index = 0; index < data.value.faces.length; index++) {
+    const face = data.value.faces[index];
+    const geometry = new THREE.BufferGeometry();
+    const vertices = new Float32Array(face.vertex);
+    const normals = new Float32Array(face.normal);
+    const indices = new Uint16Array(face.triangle);
+    geometry.setAttribute("position", new THREE.BufferAttribute(vertices, 3));
+    geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+    geometry.scale(0.1, 0.1, 0.1);
+    let material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+    listMesh[index] = new THREE.Mesh(geometry, material);
+    //   var geometry_line = new THREE.EdgesGeometry(listMesh[index].geometry);
+    //   var material_line = new THREE.LineBasicMaterial({
+    //     color: "#919191",
+    //     linewidth: 2,
+    //   });
+    //   let edges = new THREE.LineSegments(geometry_line, material_line);
+    //   listMesh[index].add(edges);
+    const { x, y, z } = data.value.centroid;
+    listMesh[index].position.x = x > 0 ? x / -10 : x / 10;
+    listMesh[index].position.y = y > 0 ? y / 10 : y / -10;
+    listMesh[index].position.z = z > 0 ? z / -10 : z / 10;
+    scene.add(listMesh[index]);
   }
 
-  const renderer = new THREE.WebGLRenderer( ); // { antialias: true }
-  let originalSize = new THREE.Vector2();
-  renderer.getSize(originalSize)
-  console.log( parseInt(originalSize.x,10) )
+  // const geometry = new THREE.BoxGeometry();
+  // const material = new THREE.MeshPhongMaterial({ color: 0x00ff00 });
+  // const cube = new THREE.Mesh(geometry, material);
+  // scene.add(cube);
 
-  renderer.setSize(  width, height );
-  // renderer.render(scene, camera);
-  renderer.setAnimationLoop( animation );
-  document.body.appendChild( renderer.domElement );
-  controls = new OrbitControls(camera, renderer.domElement);
-		controls.dampingFactor = 50;
-		controls.screenSpacePanning = false;
-  renderer.domElement.addEventListener('mousemove', onMouseMove);
+  // Tạo directional light để chiếu sáng vật thể
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+  directionalLight.position.set(3, 3, 10); // Đặt vị trí của nguồn sáng
+  var lightHolder = new THREE.Group();
+  lightHolder.add(directionalLight);
+  scene.add(lightHolder);
 
-        function onMouseDown(event) {
-        isDragging = true;
-        previousMousePosition = {
-          x: event.clientX,
-          y: event.clientY,
-        };
-      }
+  // Tạo directional light helper
+  const lightHelper = new THREE.DirectionalLightHelper(directionalLight, 5);
+  scene.add(lightHelper);
 
-      function onMouseUp() {
-        isDragging = false;
-      }
+  // Tạo OrbitControls
+  const controls = new OrbitControls(camera, renderer.domElement);
 
-      function onMouseMove(event) {
-        if (!isDragging) return;
+  // Đặt màu nền xám
 
-var deltaMove = {
-  x: event.clientX - previousMousePosition.x,
-  y: event.clientY - previousMousePosition.y,
-};
+  // Đặt vị trí của camera
+  camera.position.z = 5;
 
-cube.rotation.x += deltaMove.y * 0.01;
-cube.rotation.y += deltaMove.x * 0.01;
+  // Hàm vòng lặp render
+  const animate = function () {
+    requestAnimationFrame(animate);
+    lightHolder.quaternion.copy(camera.quaternion);
+    // Xoay vật thể
+    // cube.rotation.x += 0.01;
+    // cube.rotation.y += 0.01;
 
-previousMousePosition = {
-  x: event.clientX,
-  y: event.clientY,
-};
-      }
-  window.addEventListener('keydown', function (event) {
+    // Cập nhật controls để hỗ trợ quay và zoom
+    controls.update();
 
-          if (event.key === '+') {
-            camera.zoom *= 1.1;
-            camera.updateProjectionMatrix();
-          } else if (event.key === '-') {
-            camera.zoom /= 1.1;
-            camera.updateProjectionMatrix();
-          }
-        });
+    renderer.render(scene, camera);
+  };
 
-}
-
-get_data();
-
-
-console.log(new Date().getTime())
+  // Gọi hàm animate
+  animate();
+});
 </script>
-<template>
-  <div class="testclass">This is a div</div>
-</template>
 
-<style scoped>
-.test {
-}
-</style>
+<template></template>

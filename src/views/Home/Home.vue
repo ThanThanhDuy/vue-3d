@@ -4,42 +4,30 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { onMounted, ref } from "vue";
 import axios from "axios";
 const data = ref<any>({});
-onMounted(async () => {
+const renderModel3D = data => {
   const ele = document.getElementById("three");
   if (ele) {
-    console.log(ele?.offsetWidth, ele?.offsetHeight);
     const scene = new THREE.Scene();
+    // set background scene
     scene.background = new THREE.Color(0xffffff);
+    // setup default camera
     const camera = new THREE.PerspectiveCamera(
       40,
       ele?.offsetWidth / ele?.offsetHeight,
       0.1,
       1000
     );
-
+    // setup renderer
     const renderer = new THREE.WebGLRenderer();
     renderer.shadowMap.enabled = true;
     renderer.setSize(ele?.offsetWidth, ele?.offsetHeight);
+    // map renderer to element dom
     ele.appendChild(renderer.domElement);
 
-    let res = await axios.get(
-      "http://192.168.1.57:8767/analysis/data?id=6dc7533b-90eb-458a-81a5-ce329b40bb1c"
-    );
     let listMesh: any = [];
-    // const colors = [
-    //   "#ff0000", //
-    //   "#00ff00", //
-    //   "#ffc815", //
-    //   "#433e90", //
-    //   "#0f8880", //
-    //   "#000000", //
-    //   "#556f55", //
-    //   "#38f29f", //
-    //   "#ffaaff", //
-    //   "#cafa1a", //
-    // ];
-    data.value = res.data.data;
+
     const totalBoundingBox = new THREE.Box3();
+    const cameraBoundingBox = new THREE.Box3();
     for (let index = 0; index < data.value.faces.length; index++) {
       const face = data.value.faces[index];
       const geometry = new THREE.BufferGeometry();
@@ -50,72 +38,91 @@ onMounted(async () => {
       geometry.setAttribute("normal", new THREE.BufferAttribute(normals, 3));
       geometry.setIndex(new THREE.BufferAttribute(indices, 1));
       geometry.scale(0.1, 0.1, 0.1);
-      let material = new THREE.MeshBasicMaterial({ color: "#adb2bd" });
+      let material = new THREE.MeshPhongMaterial({ color: "#ffffff" });
       listMesh[index] = new THREE.Mesh(geometry, material);
+      // var geometry_line = new THREE.EdgesGeometry(listMesh[index].geometry);
+      // var material_line = new THREE.LineBasicMaterial({
+      //   color: "#919191",
+      //   linewidth: 2,
+      // });
+      // let edges = new THREE.LineSegments(geometry_line, material_line);
+      // listMesh[index].add(edges);
 
-      var geometry_line = new THREE.EdgesGeometry(listMesh[index].geometry);
-      var material_line = new THREE.LineBasicMaterial({
-        color: "#919191",
-        linewidth: 2,
-      });
-      let edges = new THREE.LineSegments(geometry_line, material_line);
-      listMesh[index].add(edges);
-      const { x, y, z } = data.value.centroid;
-      listMesh[index].position.x = x > 0 ? x / -10 : x / 10;
-      listMesh[index].position.y = y > 0 ? y / 10 : y / -10;
-      listMesh[index].position.z = z > 0 ? z / -10 : z / 10;
+      // const { x, y, z } = data.value.centroid;
+      // listMesh[index].position.x = x > 0 ? x / -10 : x / 10;
+      // listMesh[index].position.y = y > 0 ? y / 10 : y / -10;
+      // listMesh[index].position.z = z > 0 ? z / -10 : z / 10;
       listMesh[index].castShadow = true;
-      // camera
-
       const cubeBoundingBox = new THREE.Box3().setFromObject(listMesh[index]);
       if (
-        cubeBoundingBox.max.x > 0 &&
-        cubeBoundingBox.max.y > 0 &&
-        cubeBoundingBox.max.z > 0
+        isFinite(cubeBoundingBox.max.x) &&
+        isFinite(cubeBoundingBox.max.y) &&
+        isFinite(cubeBoundingBox.max.z)
       ) {
         totalBoundingBox.expandByPoint(cubeBoundingBox.min);
         totalBoundingBox.expandByPoint(cubeBoundingBox.max);
       }
-
       scene.add(listMesh[index]);
     }
-    // const { x, y, z } = data.value.boundBox;
-    console.log(totalBoundingBox);
+    for (let i = 0; i < listMesh.length; i++) {
+      listMesh[i].position.x =
+        (totalBoundingBox.max.x + totalBoundingBox.min.x) / -2;
+      listMesh[i].position.y =
+        Math.abs(totalBoundingBox.max.y + totalBoundingBox.min.y) / 2;
+      listMesh[i].position.z =
+        (totalBoundingBox.max.z + totalBoundingBox.min.z) / -2;
+    }
+    for (let i = 0; i < listMesh.length; i++) {
+      const cubeBoundingBox = new THREE.Box3().setFromObject(listMesh[i]);
+      if (cubeBoundingBox.max.x > 0) {
+        cameraBoundingBox.expandByPoint(cubeBoundingBox.min);
+        cameraBoundingBox.expandByPoint(cubeBoundingBox.max);
+      }
+    }
     const maxObjectSize = Math.max(
-      totalBoundingBox.max.x,
-      totalBoundingBox.max.y,
-      totalBoundingBox.max.z
+      cameraBoundingBox.max.x,
+      cameraBoundingBox.max.y,
+      cameraBoundingBox.max.z
     );
-    console.log(maxObjectSize);
 
-    // Tính toán khoảng cách cần di chuyển camera để vật thể nằm trong tầm nhìn
     const distance =
       (maxObjectSize * 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    console.log(distance);
+    console.log("distance", distance);
 
     // Đặt vị trí và hướng nhìn mới cho camera
     camera.position.set(distance, distance, distance);
+    // nguồn sáng
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+    directionalLight.position.set(3, 3, 10); // Đặt vị trí của nguồn sáng
+    var lightHolder = new THREE.Group();
+    lightHolder.add(directionalLight);
+    scene.add(lightHolder);
+
     var raycaster = new THREE.Raycaster();
     var mouse = new THREE.Vector2();
 
     function onDocumentMouseDown(event: MouseEvent) {
       event.preventDefault();
-      console.log(camera.position);
+      // console.log(camera.position);
       const uuids: string[] = [];
       scene.children.forEach((e: any) => uuids.push(e.uuid));
       mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
       mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
-
       raycaster.setFromCamera(mouse, camera);
       let intersects = raycaster.intersectObjects(scene.children);
       if (intersects.length > 0) {
-        scene.children.forEach((item: any) =>
-          item.material.color.set("#adb2bd")
-        );
         for (let i = 0; i < intersects.length; i++) {
           const el = intersects[i];
           if (uuids.findIndex(e => e == el.object.uuid) != -1) {
-            el.object.material.color.set("#8bc4ea");
+            if (el.object.type !== "BoxHelper") {
+              scene.children.forEach((item: any) => {
+                if (item.type === "Mesh") {
+                  item.material.color.set("#ffffff");
+                }
+              });
+              console.log(el);
+              el.object.material.color.set("#40ed6e");
+            }
             return;
           }
         }
@@ -123,37 +130,49 @@ onMounted(async () => {
     }
     window.addEventListener("click", onDocumentMouseDown, false);
     // // grid
-    let grid = new THREE.GridHelper(20, 20);
-    scene.add(grid);
+    // let grid = new THREE.GridHelper(20, 20);
+    // scene.add(grid);
     // control object
     let controls = new OrbitControls(camera, renderer.domElement);
     controls.dampingFactor = 50;
     controls.screenSpacePanning = false;
-    // axesHelper
-    // const axesHelper = new THREE.AxesHelper(100);
-    // scene.add(axesHelper);
-    // plane
-    // const planeGeometry = new THREE.PlaneGeometry(40, 40);
-    // const planeMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    // const plane = new THREE.Mesh(planeGeometry, planeMaterial);
-    // scene.add(plane);
-    // plane.rotation.x = -0.5 * Math.PI;
-    // plane.receiveShadow = true;
-
-    //camera.position.z = 3;
     function animate() {
       requestAnimationFrame(animate);
+      lightHolder.quaternion.copy(camera.quaternion);
       renderer.render(scene, camera);
     }
-
     animate();
   }
+};
+onMounted(async () => {
+  let res = await axios.get(
+    "http://192.168.1.57:8767/analysis/data?id=6dc7533b-90eb-458a-81a5-ce329b40bb1c"
+  );
+  data.value = data;
+  data.value.faces = data.value.faces.map(it => {
+    return {
+      ...it,
+      isShow: true,
+    };
+  });
+  renderModel3D(res.data.data);
 });
 </script>
 
 <template>
-  <div style="display: flex; padding-top: 32px">
-    <div style="width: 100%; height: calc(100vh - 32px)" id="three"></div>
+  <div style="display: flex">
+    <div style="width: 15%; height: 100vh; background-color: #ccc">
+      <div v-for="item in data.faces" :key="item.id" style="padding: 15px">
+        <div>
+          <span style="margin-right: 15px">{{ item.index + 1 }}</span>
+          <span style="margin-right: 15px">{{
+            item.isShow ? "Show" : "Hidden"
+          }}</span>
+          <button>Change</button>
+        </div>
+      </div>
+    </div>
+    <div style="width: 85%; height: 100vh" id="three"></div>
     <!-- <div style="width: 50%; height: 100vh; background-color: beige"></div> -->
   </div>
 </template>
