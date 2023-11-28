@@ -4,8 +4,10 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { onMounted, ref } from "vue";
 import axios from "axios";
 const data = ref<any>({});
-const renderModel3D = data => {
+onMounted(async () => {
   const ele = document.getElementById("three");
+  const ele_left = document.getElementById("left");
+  const ele_right = document.getElementById("right");
   if (ele) {
     const scene = new THREE.Scene();
     // set background scene
@@ -17,15 +19,24 @@ const renderModel3D = data => {
       0.1,
       1000
     );
-    // setup renderer
+
     const renderer = new THREE.WebGLRenderer();
     renderer.shadowMap.enabled = true;
     renderer.setSize(ele?.offsetWidth, ele?.offsetHeight);
-    // map renderer to element dom
     ele.appendChild(renderer.domElement);
 
+    let res = await axios.get(
+      "http://192.168.1.57:8767/analysis/data?id=6dc7533b-90eb-458a-81a5-ce329b40bb1c"
+    );
     let listMesh: any = [];
 
+    data.value = res.data.data;
+    data.value.faces = data.value.faces.map(it => {
+      return {
+        ...it,
+        isShow: true,
+      };
+    });
     const totalBoundingBox = new THREE.Box3();
     const cameraBoundingBox = new THREE.Box3();
     for (let index = 0; index < data.value.faces.length; index++) {
@@ -62,6 +73,7 @@ const renderModel3D = data => {
         totalBoundingBox.expandByPoint(cubeBoundingBox.min);
         totalBoundingBox.expandByPoint(cubeBoundingBox.max);
       }
+
       scene.add(listMesh[index]);
     }
     for (let i = 0; i < listMesh.length; i++) {
@@ -71,6 +83,14 @@ const renderModel3D = data => {
         Math.abs(totalBoundingBox.max.y + totalBoundingBox.min.y) / 2;
       listMesh[i].position.z =
         (totalBoundingBox.max.z + totalBoundingBox.min.z) / -2;
+      // const cubeHelper = new THREE.BoxHelper(listMesh[i], 0xffff00);
+      // cubeHelper.position.x =
+      //   (totalBoundingBox.max.x + totalBoundingBox.min.x) / -2;
+      // cubeHelper.position.y =
+      //   Math.abs(totalBoundingBox.max.y + totalBoundingBox.min.y) / 2;
+      // cubeHelper.position.z =
+      //   (totalBoundingBox.max.z + totalBoundingBox.min.z) / -2;
+      // scene.add(cubeHelper);
     }
     for (let i = 0; i < listMesh.length; i++) {
       const cubeBoundingBox = new THREE.Box3().setFromObject(listMesh[i]);
@@ -87,7 +107,7 @@ const renderModel3D = data => {
 
     const distance =
       (maxObjectSize * 2) / Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
-    console.log("distance", distance);
+    // console.log("distance", distance);
 
     // Đặt vị trí và hướng nhìn mới cho camera
     camera.position.set(distance, distance, distance);
@@ -106,7 +126,16 @@ const renderModel3D = data => {
       // console.log(camera.position);
       const uuids: string[] = [];
       scene.children.forEach((e: any) => uuids.push(e.uuid));
-      mouse.x = (event.clientX / renderer.domElement.clientWidth) * 2 - 1;
+      console.log(ele_left?.offsetWidth);
+
+      mouse.x =
+        (event.clientX /
+          (renderer.domElement.clientWidth +
+            ele_left?.offsetWidth +
+            ele_right?.offsetWidth)) *
+          2 -
+        1;
+
       mouse.y = -(event.clientY / renderer.domElement.clientHeight) * 2 + 1;
       raycaster.setFromCamera(mouse, camera);
       let intersects = raycaster.intersectObjects(scene.children);
@@ -120,7 +149,7 @@ const renderModel3D = data => {
                   item.material.color.set("#ffffff");
                 }
               });
-              console.log(el);
+              // console.log(el);
               el.object.material.color.set("#40ed6e");
             }
             return;
@@ -143,25 +172,15 @@ const renderModel3D = data => {
     }
     animate();
   }
-};
-onMounted(async () => {
-  let res = await axios.get(
-    "http://192.168.1.57:8767/analysis/data?id=6dc7533b-90eb-458a-81a5-ce329b40bb1c"
-  );
-  data.value = data;
-  data.value.faces = data.value.faces.map(it => {
-    return {
-      ...it,
-      isShow: true,
-    };
-  });
-  renderModel3D(res.data.data);
 });
 </script>
 
 <template>
   <div style="display: flex">
-    <div style="width: 15%; height: 100vh; background-color: #ccc">
+    <div
+      style="width: 15%; height: 100vh; background-color: #ccc; z-index: 1"
+      id="left"
+    >
       <div v-for="item in data.faces" :key="item.id" style="padding: 15px">
         <div>
           <span style="margin-right: 15px">{{ item.index + 1 }}</span>
@@ -173,6 +192,10 @@ onMounted(async () => {
       </div>
     </div>
     <div style="width: 85%; height: 100vh" id="three"></div>
+    <div
+      style="width: 15%; height: 100vh; background-color: #ccc; z-index: 1"
+      id="right"
+    ></div>
     <!-- <div style="width: 50%; height: 100vh; background-color: beige"></div> -->
   </div>
 </template>
